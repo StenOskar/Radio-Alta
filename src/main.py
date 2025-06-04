@@ -30,7 +30,11 @@ discord_logger.addHandler(file_handler)
 # Needed to run youtube videos through ffmpeg
 FFMPEG_EXE = r"C:\FFmpeg\ffmpeg-7.1.1-essentials_build\bin\ffmpeg.exe"
 
-YTDL_OPTS = {"format": "bestaudio/best", "quiet": True, "noplaylist": True}
+YTDL_OPTS = {"format": "bestaudio/best",
+             "quiet": True,
+             "noplaylist": True,
+             "default_search": "ytsearch1"
+             }
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTS)
 
 FF_BEFORE = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
@@ -86,28 +90,33 @@ async def ensure_voice(ctx: commands.Context) -> discord.VoiceClient:
 
 
 async def start_next(ctx: commands.Context):
-    """Play next song in queue or disconnect."""
     q = get_q(ctx.guild)
     url = q.get()
     if url is None:
         await ctx.voice_client.disconnect()
         return
 
+    # Fuzzy search
     try:
         stream_url, title = await fetch_stream(url)
     except Exception as e:
-        await ctx.send(f"Error fetching {url!s}: {e}")
+        await ctx.send(f"Error fetching **{url}**: {e}")
         return await start_next(ctx)
 
-    src = discord.FFmpegPCMAudio(stream_url, executable=FFMPEG_EXE, **FF_OPTS)
+    src = discord.FFmpegPCMAudio(
+        stream_url,
+        executable=FFMPEG_EXE,
+        **FF_OPTS
+    )
 
-    def after(err: Exception | None):
-        if err: print("[player error]", err)
-        fut = start_next(ctx)
-        asyncio.run_coroutine_threadsafe(fut, bot.loop)
+    def after(exc):
+        if exc:
+            print("[player error]", exc)
+        asyncio.run_coroutine_threadsafe(start_next(ctx), bot.loop)
 
     ctx.voice_client.play(src, after=after)
     await ctx.send(f"▶  **{title}**")
+
 
 
 # Command to play a song or queue it
